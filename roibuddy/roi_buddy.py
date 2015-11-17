@@ -278,6 +278,7 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
                                                self.add_tags_action,
                                                self.clear_tags_action,
                                                self.edit_tags_action,
+                                               self.update_roi_action,
                                                None,
                                                self.merge_rois,
                                                self.unmerge_rois,
@@ -342,6 +343,11 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
             self, "&Edit Tags", triggered=self.edit_tags,
             icon=QIcon(QString(os.path.join(icon_filepath, "edit.png"))),
             tip="Edit tags for the selected ROI")
+
+        self.update_roi_action = qthelpers.create_action(
+            self, "&Update", triggered=self.update_roi, shortcut="F11",
+            tip='Redraw the selected ROI with new ROI')
+        # self.addAction(self.update_roi)
 
         self.merge_rois = qthelpers.create_action(
             self, "&Merge", triggered=self.merge_ROIs, shortcut="M",
@@ -463,6 +469,11 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
         viewer.get_plot().get_items()[0].set_private(True)
         # add viewer to the display frame layout
         self.displayFrame.layout().addWidget(viewer)
+
+        # splitter = QSplitter(self)
+        # splitter.addWidget(viewer)
+        # self.displayFrame.layout().addWidget(splitter)
+        # self.displayFrame.setLayout(self.displayFrame.layout())
 
         # remove useless buttons
         for i in range(3, 18)[::-1]:
@@ -1067,6 +1078,33 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
                     poly.tags = split_tags
                     poly.update_name()
                     poly.update_color()
+
+    def update_roi(self):
+        """
+        Update the shape of an ROI with the shape of newly drawn ROI by
+        grabbing the shape of the new ROI drawn from the active drawing tool
+        """
+        if self.mode is 'edit':
+            # debug_trace()
+            new_points = self.viewer.active_tool.shape.get_points()
+            roi_to_update = self.plot.get_selected_items()
+            if len(roi_to_update) > 1:
+                QMessageBox.warning(
+                        self, 'Multiple Selected ROIs Error',
+                        'Please select one ROI to update',
+                        QMessageBox.Ok)
+                return
+            elif len(roi_to_update) == 0:
+                QMessageBox.warning(
+                    self, 'No ROI Selected Error',
+                    'Please select an ROI update',
+                    QMessageBox.Ok)
+                return
+            roi_to_update = roi_to_update[0]
+            roi_to_update.set_points(new_points)
+            self.viewer.active_tool.shape = None
+            self.plot.unselect_all()
+            self.plot.replot()
 
     def merge_ROIs(self):
         """
