@@ -345,7 +345,7 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
             tip="Edit tags for the selected ROI")
 
         self.update_roi_action = qthelpers.create_action(
-            self, "&Update", triggered=self.update_roi, shortcut="F11",
+            self, "&Update", triggered=self.update_roi, shortcut="B",
             tip='Redraw the selected ROI with new ROI')
         # self.addAction(self.update_roi)
 
@@ -1085,7 +1085,6 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
         grabbing the shape of the new ROI drawn from the active drawing tool
         """
         if self.mode is 'edit':
-            # debug_trace()
             new_points = self.viewer.active_tool.shape.get_points()
             roi_to_update = self.plot.get_selected_items()
             if len(roi_to_update) > 1:
@@ -1104,7 +1103,14 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
             roi_to_update.set_points(new_points)
             self.viewer.active_tool.shape = None
             self.plot.unselect_all()
+            items = self.plot.get_items()
+            items = filter(lambda obj: not isinstance(obj, ROI) and
+                           isinstance(obj, guiqwt.shapes.PolygonShape),
+                           items)
+            for item in items:
+                self.plot.del_item(item)
             self.plot.replot()
+            self.selection_tool.activate()
 
     def merge_ROIs(self):
         """
