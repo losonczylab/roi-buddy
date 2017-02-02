@@ -790,7 +790,6 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
                                 and str(tag) in directory:
                             paths.append(join(root, directory))
 
-                paths.sort()
                 for p in paths:
                     UI_tSeries(p, parent=self)
 
@@ -1119,9 +1118,9 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
             roi_to_update = self.plot.get_selected_items()
             if len(roi_to_update) > 1:
                 QMessageBox.warning(
-                        self, 'Multiple Selected ROIs Error',
-                        'Please select one ROI to update',
-                        QMessageBox.Ok)
+                    self, 'Multiple Selected ROIs Error',
+                    'Please select one ROI to update',
+                    QMessageBox.Ok)
                 return
             elif len(roi_to_update) == 0:
                 QMessageBox.warning(
@@ -1131,14 +1130,9 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
                 return
             roi_to_update = roi_to_update[0]
             roi_to_update.set_points(new_points)
-            self.viewer.active_tool.shape = None
+            self.plot.del_item(self.viewer.active_tool.shape)
+            self.viewer.active_tool.reset()
             self.plot.unselect_all()
-            items = self.plot.get_items()
-            items = filter(lambda obj: not isinstance(obj, ROI) and
-                           isinstance(obj, guiqwt.shapes.PolygonShape),
-                           items)
-            for item in items:
-                self.plot.del_item(item)
             self.plot.replot()
             self.selection_tool.activate()
 
