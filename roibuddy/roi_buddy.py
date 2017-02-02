@@ -1,4 +1,6 @@
 #! python
+from __future__ import absolute_import
+
 import os
 import sys
 from os.path import join, dirname, isdir
@@ -15,13 +17,16 @@ import itertools as it
 from random import shuffle, choice
 import warnings as wa
 
+# NOTE: The import order of PyQt, guidata, and guiqwt is very import and
+# will cause import errors if changed.
+
 from guidata import qthelpers
 
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 
 import guiqwt.baseplot
-import guiqwt_patch
+from . import guiqwt_patch
 guiqwt.baseplot.BasePlot.add_item_with_z_offset = \
     guiqwt_patch.add_item_with_z_offset
 from guiqwt.plot import ImageDialog
@@ -39,8 +44,8 @@ from sima.segment import ca1pc
 from sima.misc import TransformError, estimate_array_transform, \
     estimate_coordinate_transform
 
-from roiBuddyUI import Ui_ROI_Buddy
-from importROIsWidget import Ui_importROIsWidget
+from .roiBuddyUI import Ui_ROI_Buddy
+from .importROIsWidget import Ui_importROIsWidget
 
 icon_filepath = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), 'icons')
@@ -1686,6 +1691,13 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
                 if reg_method == 'polynomial':
                     method_args = {'order': poly_order}
                 else:
+                    if reg_method == 'affine-processed':
+                        reg_method = 'affine'
+                        pre_processing_method = 'ca1pc'
+                        pre_processing_kwargs = {'x_diameter':14, 'y_diameter':7} 
+                    else:
+                        pre_processing_method = None
+                        pre_processing_kwargs = {}
                     method_args = {}
                 active_tSeries.dataset.import_transformed_ROIs(
                     source_dataset=source_dataset.dataset,
@@ -1696,6 +1708,8 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
                     target_label=target_label,
                     anchor_label=anchor_label,
                     copy_properties=copy_properties,
+                    pre_processing_method=pre_processing_method,
+                    pre_processing_kwargs=pre_processing_kwargs,
                     **method_args)
             except TransformError:
                 QMessageBox.warning(self, 'Transform Error',
@@ -2353,7 +2367,8 @@ class ImportROIsWidget(QDialog, Ui_importROIsWidget):
         self.auto_manual.addItems(['Auto', 'Manual'])
         self.auto_manual.setCurrentIndex(0)
 
-        self.registrationMethod.addItems(['affine',
+        self.registrationMethod.addItems(['affine-processed',
+                                          'affine',
                                           'polynomial',
                                           'piecewise-affine',
                                           'projective',
@@ -2444,13 +2459,3 @@ def random_id():
     chars = \
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     return '_' + ''.join(choice(chars) for i in range(12))
-
-
-def main():
-    app = QApplication(sys.argv)
-    form = RoiBuddy()
-    form.show()
-    app.exec_()
-
-if __name__ == "__main__":
-    main()
