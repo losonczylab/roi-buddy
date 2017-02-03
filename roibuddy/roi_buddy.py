@@ -189,17 +189,69 @@ class EllipseTool(RectangularShapeTool):
         super(EllipseTool, self).handle_final_shape(shape)
 
 
+class DeleteCmd(QUndoCommand):
+    """Instance of revertable delete command."""
+
+    def __init__(self, plot, mode, items_to_remove):
+        """Initialize the delete command."""
+        super(DeleteCmd, self).__init__()
+        self.plot = plot
+        self.mode = mode
+        self.items_to_remove = items_to_remove
+
+    def redo(self):
+        """Delete the selected items."""
+        self.plot.unselect_all()
+        if self.mode == 'align':
+            for item in self.items_to_remove:
+                item.parent.roi_list.remove(item)
+        self.plot.del_items(self.items_to_remove)
+        self.plot.replot()
+
+    def undo(self):
+        """Add the previously removed items back."""
+        if self.mode == 'align':
+            for item in self.items_to_remove:
+                item.parent.roi_list.append(item)
+        for item in self.items_to_remove:
+            self.plot.add_item(item)
+        self.plot.select_some_items(self.items_to_remove)
+        self.plot.replot()
+
+
+class UpdateROIShapeCmd(QUndoCommand):
+    """Instance of revertable ROI shape update command."""
+
+    def __init__(self, plot, roi_to_update, new_points):
+        """Initialize the update_roi command."""
+        super(UpdateROIShapeCmd, self).__init__()
+        self.plot = plot
+        self.roi_to_update = roi_to_update
+        self.new_points = new_points
+        self.old_points = self.roi_to_update.get_points()
+
+    def redo(self):
+        """Update the ROI object's points to the new values."""
+        self.roi_to_update.set_points(self.new_points)
+        self.plot.replot()
+
+    def undo(self):
+        """Revert the ROI object's points to the original values."""
+        self.roi_to_update.set_points(self.old_points)
+        self.plot.replot()
+
+
 class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
     """Instance of the ROI Buddy Qt interface."""
-    def __init__(self):
-        """
-        Initialize the application
-        """
 
+    def __init__(self):
+        """Initialize the application."""
         # initialize the UI and parent class
         QMainWindow.__init__(self)
         self.setupUi(self)
         self.setWindowTitle('ROI Buddy')
+
+        self.undoStack = QUndoStack(self)
 
         # define actions for menu bar and ROI manager
         self.define_actions()
@@ -296,6 +348,7 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
         self.plot.replot()
 
     def create_menu(self):
+        """Initialize the file menu."""
         self.file_menu = self.menuBar().addMenu("&File")
 
         qthelpers.add_actions(self.file_menu, [self.add_tseries_action,
@@ -310,16 +363,20 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
                                                self.edit_tags_action,
                                                self.update_roi_action,
                                                None,
+                                               self.undo_action,
+                                               self.redo_action,
+                                               None,
                                                self.merge_rois,
                                                self.unmerge_rois,
                                                None,
                                                self.quit_action])
 
     def create_status_bar(self):
+        """Initialize the status bar."""
         self.statusBar().addWidget(QLabel(""), 1)
 
     def define_actions(self):
-        # File menu actions
+        """File menu actions."""
         self.quit_action = qthelpers.create_action(
             self, "&Quit", triggered=self.close, shortcut="Ctrl+Q",
             tip="Close ROI Buddy")
@@ -336,7 +393,8 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
             self, "&Save current ROIs",
             triggered=lambda: self.save([self.tSeries_list.currentItem()]),
             shortcut="Ctrl+S",
-            icon=QIcon(os.path.join(icon_filepath,"document-save-5.png")),
+            icon=QIcon(os.path.join(icon_filepath,
+                                    "document-save-5.png")),
             tip="Save the current ROI set to file.")
 
         self.save_all_action = qthelpers.create_action(
@@ -377,7 +435,6 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
         self.update_roi_action = qthelpers.create_action(
             self, "&Update", triggered=self.update_roi, shortcut="B",
             tip='Redraw the selected ROI with new ROI')
-        # self.addAction(self.update_roi)
 
         self.merge_rois = qthelpers.create_action(
             self, "&Merge", triggered=self.merge_ROIs, shortcut="M",
@@ -416,11 +473,22 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
             shortcut='Ctrl+A')
         self.addAction(self.select_all_action)
 
+        self.undo_action = qthelpers.create_action(
+            self, "&Undo Action", triggered=self.undoStack.undo,
+            shortcut="Z", tip="Undo deletion of  an object.")
+        self.addAction(self.undo_action)
+
+        self.redo_action = qthelpers.create_action(
+            self, "&Redo Action", triggered=self.undoStack.redo,
+            shortcut="Y", tip="Redo deletion of an object.")
+        self.addAction(self.redo_action)
+
         self.debug_action = qthelpers.create_action(
             self, "&Debug", triggered=debug_trace, shortcut="F10")
         self.addAction(self.debug_action)
 
     def connectSignals(self):
+        """Connect events to their respective slots."""
 
         # toggle the edit or align mdoe
         self.modeSelection.buttonClicked.connect(self.toggle_mode)
@@ -660,12 +728,10 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
         items = self.plot.get_selected_items()
         # Don't delete the base image
         items = [item for item in items if not isinstance(item, ImageItem)]
-        self.plot.unselect_all()
-        if self.mode == 'align':
-            for item in items:
-                item.parent.roi_list.remove(item)
-        self.plot.del_items(items)
-        self.plot.replot()
+        cmd = DeleteCmd(self.plot,
+                        self.mode,
+                        items)
+        self.undoStack.push(cmd)
 
     def activate_freeform_tool(self):
         if self.mode == 'edit':
@@ -1110,8 +1176,10 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
 
     def update_roi(self):
         """
-        Update the shape of an ROI with the shape of newly drawn ROI by
-        grabbing the shape of the new ROI drawn from the active drawing tool
+        Update the shape of an ROI.
+
+        The ROI's shape is set to the the shape of newly drawn ROI by
+        the active drawing tool.
         """
         if self.mode is 'edit':
             new_points = self.viewer.active_tool.shape.get_points()
@@ -1129,7 +1197,9 @@ class RoiBuddy(QMainWindow, Ui_ROI_Buddy):
                     QMessageBox.Ok)
                 return
             roi_to_update = roi_to_update[0]
-            roi_to_update.set_points(new_points)
+            cmd = UpdateROIShapeCmd(self.plot, roi_to_update,
+                                    new_points)
+            self.undoStack.push(cmd)
             self.plot.del_item(self.viewer.active_tool.shape)
             self.viewer.active_tool.reset()
             self.plot.unselect_all()
